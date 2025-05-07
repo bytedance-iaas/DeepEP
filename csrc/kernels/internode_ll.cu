@@ -322,8 +322,8 @@ void dispatch(void* packed_recv_x, float* packed_recv_x_scales,
               void* workspace, int* usage_flag,
               cudaStream_t stream, int phases) {
     constexpr int kNumMaxTopK = 9;
-    constexpr int kNumWarpsPerGroup = 10;
-    constexpr int kNumWarpGroups = 3;
+    constexpr int kNumWarpsPerGroup = 8;
+    constexpr int kNumWarpGroups = 4;
     EP_STATIC_ASSERT(kNumMaxTopK + 1 <= kNumWarpGroups * kNumWarpsPerGroup, "Too many top-k selections");
 
     const auto num_warps = kNumWarpGroups * kNumWarpsPerGroup;
@@ -522,8 +522,9 @@ void combine(void* combined_x,
              int num_topk, int num_experts, int rank, int num_ranks,
              void* workspace, int* usage_flag,
              cudaStream_t stream, int phases, bool zero_copy) {
-    constexpr int kNumWarpsPerGroup = 10;
-    constexpr int kNumWarpGroups = 3;
+
+    constexpr int kNumWarpsPerGroup = 8;
+    constexpr int kNumWarpGroups = 4;
     constexpr int kNumMaxTopk = 9;
 
     const auto num_warps = kNumWarpGroups * kNumWarpsPerGroup;
