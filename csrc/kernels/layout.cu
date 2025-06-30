@@ -121,8 +121,10 @@ void get_dispatch_layout(const int64_t* topk_idx,
                          int* num_tokens_per_expert, bool* is_token_in_rank,
                          int num_tokens, int num_topk, int num_ranks, int num_experts,
                          cudaStream_t stream) {
-    constexpr int kNumThreads = 256, kNumExpertsPerSM = 32, kNumRanksPerSM = 8;
+                            //num_experts=256 num_ranks=16
+    constexpr int kNumThreads = 256, kNumExpertsPerSM = 64, kNumRanksPerSM = 64;
     int num_sms = ((num_experts + kNumExpertsPerSM - 1) / kNumExpertsPerSM) + (num_ranks + kNumRanksPerSM - 1) / kNumRanksPerSM;
+    printf("num_sms: %d\n", num_sms);
     EP_STATIC_ASSERT(kNumExpertsPerSM % NUM_MAX_NVL_PEERS == 0, "Invalid number of experts per SM");
 
     SETUP_LAUNCH_CONFIG(num_sms, kNumThreads, stream);
