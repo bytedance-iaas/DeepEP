@@ -140,16 +140,14 @@ def test_main(num_sms: int, local_rank: int, num_local_ranks: int, num_ranks: in
                             check_data(recv_x, recv_gbl_rank_prefix_sum)
 
                     # Test combine
-                    bias_0 = torch.ones((num_tokens, hidden), dtype=torch.bfloat16, device='cuda')
-                    bias_1 = torch.randn((num_tokens, hidden), dtype=torch.bfloat16, device='cuda')
-                    combine_args = {'x': recv_x, 'bias': (bias_0, bias_1), 'handle': handle, 'config': config, 'async_finish': async_mode}
+                    combine_args = {'x': recv_x, 'handle': handle, 'config': config, 'async_finish': async_mode}
                     if with_topk:
                         combine_args.update({'topk_weights': recv_topk_weights})
                     if previous_mode:
                         combine_args.update({'previous_event': buffer.capture()})
                     combined_x, combined_topk_weights, event = buffer.combine(**combine_args)
                     event.current_stream_wait() if async_mode else ()
-                    check_x = (combined_x.float() - bias_0.float() - bias_1.float()) / is_token_in_rank.sum(dim=1).unsqueeze(1)
+                    check_x = combined_x.float() / is_token_in_rank.sum(dim=1).unsqueeze(1)
                     ref_x = x_pure_rand if current_x is x_pure_rand else x
                     assert calc_diff(check_x, ref_x) < 5e-6
                     if with_topk:
@@ -222,7 +220,7 @@ def test_main(num_sms: int, local_rank: int, num_local_ranks: int, num_ranks: in
 def test_loop(local_rank: int, num_local_ranks: int):
     num_nodes = int(os.getenv('WORLD_SIZE', 1))
     rank, num_ranks, group = init_dist(local_rank, num_local_ranks)
-    test_ll_compatibility = os.getenv('EP_TEST_LL_COMPATIBILITY', False)
+    test_ll_compatibility = True
     if test_ll_compatibility:
         ll_num_tokens, ll_hidden, ll_num_experts, ll_num_topk = 16, 5120, 256, 9
 
@@ -230,7 +228,7 @@ def test_loop(local_rank: int, num_local_ranks: int):
     num_qps_per_rank = max(num_sms, ll_num_experts // num_ranks if test_ll_compatibility else 0)
 
     buffer = deep_ep.Buffer(group, int(1e9), int(1e9), low_latency_mode=test_ll_compatibility,
-                            num_qps_per_rank=num_qps_per_rank)
+                            num_qps_per_rank=num_qps_per_rank, allow_mnnvl=True)
     assert num_local_ranks == 8 and num_ranks > 8
     torch.manual_seed(rank)
 

@@ -147,16 +147,6 @@ class Buffer:
             size: the RDMA buffer size recommended.
         """
         return deep_ep_cpp.get_low_latency_rdma_size_hint(num_max_dispatch_tokens_per_rank, hidden, num_ranks, num_experts)
-    
-    def get_comm_stream(self) -> torch.Stream:
-        """
-        Get the communication stream.
-
-        Returns:
-            stream: the communication stream. 
-        """
-        ts: torch.Stream = self.runtime.get_comm_stream()
-        return torch.cuda.Stream(stream_id=ts.stream_id, device_index=ts.device_index, device_type=ts.device_type)
 
     def get_local_buffer_tensor(self, dtype: torch.dtype, size: Optional[torch.Size] = None,
                                 offset: int = 0, use_rdma_buffer: bool = False) -> torch.Tensor:
@@ -175,16 +165,6 @@ class Buffer:
 
         assert tensor.numel() >= size.numel()
         return tensor[:size.numel()].view(size)
-
-    @staticmethod
-    def _unpack_bias(bias: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]):
-        bias_0, bias_1 = None, None
-        if isinstance(bias, torch.Tensor):
-            bias_0 = bias
-        elif isinstance(bias, tuple):
-            assert len(bias) == 2
-            bias_0, bias_1 = bias
-        return bias_0, bias_1
 
     @staticmethod
     def get_dispatch_config(num_ranks: int) -> Config:
@@ -356,7 +336,6 @@ class Buffer:
     # noinspection PyTypeChecker
     def combine(self, x: torch.Tensor, handle: Tuple,
                 topk_weights: Optional[torch.Tensor] = None,
-                bias: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]] = None,
                 config: Optional[Config] = None,
                 previous_event: Optional[EventOverlap] = None, async_finish: bool = False,
                 allocate_on_comm_stream: bool = False) -> \
@@ -387,15 +366,14 @@ class Buffer:
 
         # Internode
         if self.runtime.get_num_rdma_ranks() > 1:
-            return self.internode_combine(x, handle, topk_weights, bias, config, previous_event, async_finish, allocate_on_comm_stream)
+            return self.internode_combine(x, handle, topk_weights, config, previous_event, async_finish, allocate_on_comm_stream)
 
         # NOTES: the second `_` is for the sending side, so we should use the third one
         rank_prefix_matrix, _, channel_prefix_matrix, src_idx, is_recv_token_in_rank, send_head = handle
-        bias_0, bias_1 = Buffer._unpack_bias(bias)
 
         # Launch the kernel
         recv_x, recv_topk_weights, event = self.runtime.intranode_combine(
-            x, topk_weights, bias_0, bias_1,
+            x, topk_weights,
             src_idx, rank_prefix_matrix, channel_prefix_matrix, send_head, config,
             getattr(previous_event, 'event', None), async_finish, allocate_on_comm_stream)
         return recv_x, recv_topk_weights, EventOverlap(event)
@@ -454,7 +432,6 @@ class Buffer:
     # noinspection PyTypeChecker
     def internode_combine(self, x: torch.Tensor, handle: Union[tuple, list],
                           topk_weights: Optional[torch.Tensor] = None,
-                          bias: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]] = None,
                           config: Optional[Config] = None,
                           previous_event: Optional[EventOverlap] = None, async_finish: bool = False,
                           allocate_on_comm_stream: bool = False) -> \
@@ -465,16 +442,15 @@ class Buffer:
         """
         assert config is not None
 
-        # Unpack handle and bias
+        # Unpack handle
         is_combined_token_in_rank, \
             _, _, \
             rdma_channel_prefix_matrix, rdma_rank_prefix_sum, gbl_channel_prefix_matrix, gbl_rank_prefix_sum, \
             src_meta, send_rdma_head, send_nvl_head = handle
-        bias_0, bias_1 = Buffer._unpack_bias(bias)
 
         # Launch the kernel
         combined_x, combined_topk_weights, event = self.runtime.internode_combine(
-            x, topk_weights, bias_0, bias_1,
+            x, topk_weights,
             src_meta, is_combined_token_in_rank,
             rdma_channel_prefix_matrix, rdma_rank_prefix_sum, gbl_channel_prefix_matrix,
             send_rdma_head, send_nvl_head, config, getattr(previous_event, 'event', None),
@@ -594,6 +570,7 @@ class Buffer:
             event: the event after executing the kernel (valid only if `async_finish` is set).
             hook: the receiving hook function (valid only if `return_recv_hook` is set).
         """
+        topk_idx = topk_idx.to(torch.int32)
         src_info, layout_range, num_max_dispatch_tokens_per_rank, hidden, num_experts = handle
         combined_x, event, hook = self.runtime.low_latency_combine(x, topk_idx, topk_weights, src_info, layout_range,
                                                                    num_max_dispatch_tokens_per_rank, num_experts,
