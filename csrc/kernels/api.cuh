@@ -68,7 +68,6 @@ void cached_notify_combine(void** buffer_ptrs, int* send_head, int num_channels,
 void combine(cudaDataType_t type,
              void* recv_x, float* recv_topk_weights,
              const void* x, const float* topk_weights,
-             const void* bias_0, const void* bias_1,
              const int* src_idx, const int* rank_prefix_matrix, const int* channel_prefix_matrix,
              int* send_head, int num_tokens, int num_recv_tokens, int hidden, int num_topk,
              void** buffer_ptrs, int rank, int num_ranks,
@@ -122,7 +121,6 @@ void combine(cudaDataType_t type,
              void* combined_x, float* combined_topk_weights,
              const bool* is_combined_token_in_rank,
              const void* x, const float* topk_weights,
-             const void* bias_0, const void* bias_1,
              const int* combined_rdma_head, const int* combined_nvl_head,
              const void* src_meta, const int* rdma_channel_prefix_matrix, const int* rdma_rank_prefix_sum, const int* gbl_channel_prefix_matrix,
              int num_tokens, int num_combined_tokens, int hidden, int num_topk,
@@ -153,14 +151,14 @@ void dispatch(void* packed_recv_x, void* packed_recv_x_scales,
               cudaStream_t stream, int phases);
 
 void combine(void* combined_x,
-             void* rdma_recv_x, int* rdma_recv_flag, void* rdma_send_x,
-             const void* x, const int64_t* topk_idx, const float* topk_weights,
-             const int* src_info, const int64_t* layout_range,
-             int* next_clean, int num_next_clean_int,
-             int num_combined_tokens, int hidden, int num_max_dispatch_tokens_per_rank,
-             int num_topk, int num_experts, int rank, int num_ranks,
-             void* workspace, int num_device_sms,
-             cudaStream_t stream, int phases, bool zero_copy);
+                void* rdma_recv_x, int* rdma_recv_flag, void* rdma_send_x,
+                const void* x, const int32_t* topk_idx_i32, const float* topk_weights,
+               const int* src_info, const int64_t* layout_range,
+                int* next_clean, int num_next_clean_int,
+                int num_combined_tokens, int hidden, int num_max_dispatch_tokens_per_rank,
+                int num_topk, int num_experts, int rank, int num_ranks,
+                void* workspace, int num_device_sms,
+                cudaStream_t stream, int phases, bool zero_copy);
 
 } // namespace internode_ll
 
