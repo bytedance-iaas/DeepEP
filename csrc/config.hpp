@@ -119,6 +119,7 @@ struct LowLatencyBuffer {
 
 struct LowLatencyLayout {
     size_t total_bytes = 0;
+    // 双缓存机制用于流水线
     LowLatencyBuffer buffers[2];
 
     template <typename out_ptr_t = void*, typename count_ptr_t = uint8_t*, typename in_ptr_t = void*>
